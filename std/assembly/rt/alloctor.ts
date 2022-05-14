@@ -1,13 +1,14 @@
 import { BLOCK, BLOCK_OVERHEAD, DEBUG, TRACE } from "./common";
 
+@inline const FREE_BLOCK_SIZE = offsetof<Block>();
 @inline const MIN_BLOCK_SIZE = 32;
 
 @inline const ALLOCATED = 1;
 @inline const FREE = 0;
 
 // statistic
-@global let totalblock: u32 = 1;
-@global let usedblock: u32 = 0;
+@global export let totalblock: u32 = 1;
+@global export let usedblock: u32 = 0;
 
 @unmanaged
 export class Block extends BLOCK {
@@ -146,6 +147,24 @@ export function __free(ptr: usize): void {
     block = prev
   }
   if (DEBUG) assert(block.getAllocated() == FREE);
+}
+
+// @ts-ignore: decorator
+@global @unsafe
+export function __shrink(): usize {
+  let prev = freeRoot;
+  let curr = freeRoot;
+  let next = freeRoot.free;
+  while (next != null) {
+    prev = curr;
+    curr = next;
+    next = next.free;
+  }
+  if (changetype<usize>(curr) != changetype<usize>(freeRoot) && changetype<i32>(curr.next) >= (memory.size() << 16)) {
+    // last free block is the last block
+    return changetype<usize>(curr) + FREE_BLOCK_SIZE;
+  }
+  return -1;
 }
 
 // #    # ###### #      #####  ###### #####
