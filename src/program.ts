@@ -2834,6 +2834,88 @@ export class Program extends DiagnosticEmitter {
     }
   }
 
+
+  createTemporaryClass(
+    /** The declaration to initialize. */
+    declaration: ClassDeclaration,
+    /** Parent element, usually a file or namespace. */
+    parent: Element,
+    /** So far queued `extends` clauses. */
+    queuedExtends: ClassPrototype[],
+    /** So far queued `implements` clauses. */
+    queuedImplements: ClassPrototype[]
+  ): ClassPrototype | null {
+    let name = declaration.name.text;
+    let element = new ClassPrototype(
+      name,
+      parent,
+      declaration,
+      this.checkDecorators(declaration.decorators,
+        DecoratorFlags.Global |
+        DecoratorFlags.Final |
+        DecoratorFlags.Unmanaged
+      )
+    );
+    if (!parent.add(name, element)) return null;
+
+    // remember classes that implement interfaces
+    let implementsTypes = declaration.implementsTypes;
+    if (implementsTypes) {
+      let numImplementsTypes = implementsTypes.length;
+      if (numImplementsTypes) {
+        // cannot implement interfaces when unmanaged
+        if (element.hasDecorator(DecoratorFlags.Unmanaged)) {
+          this.error(
+            DiagnosticCode.Unmanaged_classes_cannot_implement_interfaces,
+            Range.join(
+              declaration.name.range,
+              implementsTypes[numImplementsTypes - 1].range
+            )
+          );
+        } else {
+          queuedImplements.push(element);
+        }
+      }
+    }
+
+    // remember classes that extend another class
+    if (declaration.extendsType) {
+      queuedExtends.push(element);
+    } else if (
+      !element.hasDecorator(DecoratorFlags.Unmanaged) &&
+      element.internalName != BuiltinNames.Object
+    ) {
+      element.implicitlyExtendsObject = true;
+    }
+
+    // initialize members
+    let memberDeclarations = declaration.members;
+    for (let i = 0, k = memberDeclarations.length; i < k; ++i) {
+      let memberDeclaration = memberDeclarations[i];
+      switch (memberDeclaration.kind) {
+        case NodeKind.FieldDeclaration: {
+          this.initializeField(<FieldDeclaration>memberDeclaration, element);
+          break;
+        }
+        case NodeKind.MethodDeclaration: {
+          let methodDeclaration = <MethodDeclaration>memberDeclaration;
+          if (memberDeclaration.isAny(CommonFlags.Get | CommonFlags.Set)) {
+            this.initializeProperty(methodDeclaration, element);
+          } else {
+            let method = this.initializeMethod(methodDeclaration, element);
+            if (method && methodDeclaration.name.kind == NodeKind.Constructor) {
+              element.constructorPrototype = method;
+            }
+          }
+          break;
+        }
+        case NodeKind.IndexSignature: break; // ignored for now
+        default: assert(false); // class member expected
+      }
+    }
+    return element;
+  }
+
   /** Determines the element type of a built-in array. */
   // determineBuiltinArrayType(target: Class): Type | null {
   //   switch (target.internalName) {
@@ -4324,6 +4406,10 @@ export class ClassPrototype extends DeclaredElement {
     else assert(!instances.has(instanceKey));
     instances.set(instanceKey, instance);
   }
+}
+
+export class TemporaryClass extends ClassPrototype {
+
 }
 
 /** A resolved class. */

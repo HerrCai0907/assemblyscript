@@ -25,6 +25,10 @@ type auto = i32;
     return unreachable();
   }
 
+  @builtin bind(...args: auto[]): usize {
+    return unreachable();
+  }
+
   toString(this: T): string {
     return "function() { [native code] }";
   }

@@ -43,7 +43,9 @@ import {
   NodeKind,
   LiteralExpression,
   ArrayLiteralExpression,
-  IdentifierExpression
+  IdentifierExpression,
+  Node,
+  Source
 } from "./ast";
 
 import {
@@ -85,7 +87,8 @@ import {
   DecoratorFlags,
   Class,
   PropertyPrototype,
-  VariableLikeElement
+  VariableLikeElement,
+  ClassPrototype
 } from "./program";
 
 import {
@@ -736,6 +739,7 @@ export namespace BuiltinNames {
   // std/function.ts
   export const Function = "~lib/function/Function";
   export const Function_call = "~lib/function/Function#call";
+  export const Function_bind = "~lib/function/Function#bind";
 
   // std/memory.ts
   export const memory_size = "~lib/memory/memory.size";
@@ -3706,16 +3710,21 @@ builtinFunctions.set(BuiltinNames.INFO, builtin_info);
 
 // === Function builtins ======================================================================
 
-// Function<T>#call(thisArg: thisof<T> | null, ...args: *[]) -> returnof<T>
-function builtin_function_call(ctx: BuiltinFunctionContext): ExpressionRef {
-  let compiler = ctx.compiler;
+function getFunctionTypeFromContext(ctx: BuiltinFunctionContext): Type {
   let parent = ctx.prototype.parent;
   assert(parent.kind == ElementKind.Class);
   let classInstance = <Class>parent;
-  assert(classInstance.prototype == compiler.program.functionPrototype);
+  assert(classInstance.prototype == ctx.compiler.program.functionPrototype);
   let typeArguments = assert(classInstance.typeArguments);
   assert(typeArguments.length == 1);
   let ftype = typeArguments[0];
+  return ftype;
+}
+
+// Function<T>#call(thisArg: thisof<T> | null, ...args: *[]) -> returnof<T>
+function builtin_function_call(ctx: BuiltinFunctionContext): ExpressionRef {
+  let compiler = ctx.compiler;
+  let ftype = getFunctionTypeFromContext(ctx);
   let signature = assert(ftype.getSignature());
   let returnType = signature.returnType;
   if (
@@ -3741,6 +3750,48 @@ function builtin_function_call(ctx: BuiltinFunctionContext): ExpressionRef {
   return compiler.compileCallIndirect(signature, functionArg, ctx.operands, ctx.reportNode, thisArg, ctx.contextualType == Type.void);
 }
 builtinFunctions.set(BuiltinNames.Function_call, builtin_function_call);
+
+let anaymous = 0; // FIXME
+function builtin_function_bind(ctx: BuiltinFunctionContext): ExpressionRef {
+  let compiler = ctx.compiler;
+  let module = compiler.module;
+  let ftype = getFunctionTypeFromContext(ctx);
+  let signature = assert(ftype.getSignature());
+
+  const originFunctionParameterTypes = signature.parameterTypes;
+
+  let functionArg = compiler.compileExpression(assert(ctx.thisOperand), ftype, Constraints.ConvImplicit);
+
+  const operands = ctx.operands;
+  if (operands.length >= 1 && operands[0].kind != NodeKind.Null) {
+    compiler.warning(DiagnosticCode.Not_implemented_0, operands[0].range, "bind this");
+  }
+  if (operands.length > 1 + originFunctionParameterTypes.length) {
+    compiler.error(
+      DiagnosticCode.Expected_0_arguments_but_got_1,
+      operands[1 + originFunctionParameterTypes.length].range,
+      (1 + originFunctionParameterTypes.length).toString(),
+      operands.length.toString()
+    );
+  }
+  let newOperands = new Array<ExpressionRef>(operands.length);
+  let newOperandTypes = new Array<Type>(operands.length);
+  for (let i = 1; i < operands.length; i++) {
+    const index = i - 1;
+    const operand = operands[i];
+    const expr = compiler.compileExpression(operand, ctx.contextualType);
+    const fromType = compiler.currentType;
+    const toType = originFunctionParameterTypes[index];
+    newOperands[index] = compiler.convertExpression(expr, fromType, toType, false, operand);
+    newOperandTypes[index] = toType;
+  }
+  anaymous++;
+  // new ClassPrototype
+  return module.block(null, [
+    functionArg,
+  ]);
+}
+builtinFunctions.set(BuiltinNames.Function_bind, builtin_function_bind);
 
 // String.raw(parts: TemplateStringsArray, ...values: unknown[]): string
 function builtin_string_raw(ctx: BuiltinFunctionContext): ExpressionRef {
