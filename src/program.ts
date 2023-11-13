@@ -4243,6 +4243,47 @@ export class ClassPrototype extends DeclaredElement {
     this.decoratorFlags = decoratorFlags;
   }
 
+  static anoymousId: i32 = 0;
+  static createAnonymousClassPrototype(parent: Element, fieldNames: IdentifierExpression[], fieldInitializer: Expression[]): ClassPrototype {
+    const anoymousId = ClassPrototype.anoymousId;
+    const name = `class|anoymous|${anoymousId}`;
+    const nativeRange = Source.native.range;
+    let members: FieldDeclaration[] = [];
+    for (let i = 0; i < fieldNames.length; i++) {
+      members.push(
+        Node.createFieldDeclaration(fieldNames[i], null, CommonFlags.Instance, null, fieldInitializer[i], nativeRange)
+      );
+    }
+    let prototype = new ClassPrototype(
+      name,
+      parent,
+      // TODO: is this AST really needed? Can we only provide part of it.
+      Node.createClassDeclaration(
+        Node.createIdentifierExpression(name, nativeRange),
+        null,
+        CommonFlags.None,
+        null,
+        null,
+        null,
+        members, // It should be used
+        nativeRange
+      )
+    );
+    assert(fieldNames.length == fieldInitializer.length);
+    for (let i = 0; i < fieldNames.length; i++) {
+      let fieldName = fieldNames[i].text;
+      let element = PropertyPrototype.forField(
+        fieldName,
+        prototype,
+        members[i],
+        DecoratorFlags.None
+      );
+      prototype.addInstance(fieldName, element);
+    }
+    ClassPrototype.anoymousId++;
+    return prototype;
+  }
+
   /** Gets the associated type parameter nodes. */
   get typeParameterNodes(): TypeParameterNode[] | null {
     return (<ClassDeclaration>this.declaration).typeParameters;

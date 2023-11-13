@@ -454,6 +454,7 @@ export abstract class DiagnosticEmitter {
     arg1: string | null = null,
     arg2: string | null = null
   ): void {
+    console.trace()
     this.emitDiagnostic(code, DiagnosticCategory.Error, range, null, arg0, arg1, arg2);
   }
 
@@ -466,6 +467,7 @@ export abstract class DiagnosticEmitter {
     arg1: string | null = null,
     arg2: string | null = null
   ): void {
+    console.trace()
     this.emitDiagnostic(code, DiagnosticCategory.Error, range, relatedRange, arg0, arg1, arg2);
   }
 }

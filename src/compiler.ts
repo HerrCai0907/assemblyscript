@@ -8451,6 +8451,19 @@ export class Compiler extends DiagnosticEmitter {
   private compileObjectLiteral(expression: ObjectLiteralExpression, contextualType: Type): ExpressionRef {
     let module = this.module;
 
+    if (contextualType == Type.auto) {
+      let flow = this.currentFlow;
+      let prototype = ClassPrototype.createAnonymousClassPrototype(
+        flow.sourceFunction,
+        expression.names,
+        expression.values
+      );
+      let instance = this.resolver.resolveClass(prototype, null);
+      if (!instance) return this.module.unreachable();
+      let ctor = this.ensureConstructor(instance, expression);
+      return this.compileInstantiate(ctor, [], Constraints.ConvExplicit, expression);
+    }
+
     // Check that contextual type is a class (TODO: hidden class for interfaces?)
     let classReference = contextualType.getClass();
     if (!classReference) {
