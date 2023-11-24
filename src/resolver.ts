@@ -76,7 +76,11 @@ import {
   NewExpression,
   ArrayLiteralExpression,
   ArrowKind,
-  ExpressionStatement
+  ExpressionStatement,
+  Statement,
+  ReturnStatement,
+  BlockStatement,
+  VariableStatement
 } from "./ast";
 
 import {
@@ -94,7 +98,8 @@ import {
 
 import {
   cloneMap,
-  isPowerOf2
+  isPowerOf2,
+  mergeMaps
 } from "./util";
 
 import {
@@ -947,6 +952,62 @@ export class Resolver extends DiagnosticEmitter {
   getElementOfType(type: Type): Element | null {
     let classReference = type.getClassOrWrapper(this.program);
     if (classReference) return classReference;
+    return null;
+  }
+  
+  // =================================================== Statements ===================================================
+  inferFunctionReturnType(
+    stmt: Statement,
+    ctxElement: Element,
+    ctxTypes: Map<string,Type> | null
+  ): Type | null {
+    return this.doInferFunctionReturnType([stmt], ctxElement, ctxTypes, null);
+  }
+  private doInferFunctionReturnType(
+    stmts: Statement[],
+    ctxElement: Element,
+    ctxTypes: Map<string,Type> | null,
+    variableMap: Map<string, Type> | null
+  ): Type | null {
+    let innerVariableMap: Map<string, Type> | null = null;
+    for (let i = 0, k = stmts.length; i < k; i++) {
+      let stmt = stmts[i];
+      switch (stmt.kind) {
+        case NodeKind.Block: {
+          let mergedVariableMap: Map<string, Type> | null = null;
+          if (variableMap && innerVariableMap) mergedVariableMap = mergeMaps(variableMap, innerVariableMap);
+          else if (variableMap) mergedVariableMap = variableMap;
+          else if (innerVariableMap) mergedVariableMap = innerVariableMap;
+          let statements = (<BlockStatement>stmt).statements;
+          let type = this.doInferFunctionReturnType(statements, ctxElement, ctxTypes, mergedVariableMap);
+          if (type) return type;
+          break;
+        }
+        case NodeKind.Variable: {
+          let variables = (<VariableStatement>stmt).declarations;
+          for (let j = 0, l = variables.length; j < l; j++) {
+            const variable = variables[j];
+            const typeNode = variable.type;
+            if (!typeNode) continue;
+            let type = this.resolveType(typeNode, null, ctxElement, ctxTypes, ReportMode.Swallow);
+            if (!type) continue;
+            if (!innerVariableMap) innerVariableMap = new Map();
+            innerVariableMap.set(variable.name.text, type);
+          }
+          break;
+        }
+        case NodeKind.Return: {
+          let value = (<ReturnStatement>stmt).value;
+          if (value == null) return Type.void;
+          if (value.kind == NodeKind.Identifier) {
+            let name = (<IdentifierExpression>value).text;
+            if (innerVariableMap && innerVariableMap.has(name)) return innerVariableMap.get(name)!;
+            if (variableMap && variableMap.has(name)) return variableMap.get(name)!;
+          }
+          break;
+        }
+      }
+    }
     return null;
   }
 
@@ -2917,23 +2978,32 @@ export class Resolver extends DiagnosticEmitter {
     } else {
       let typeNode = signatureNode.returnType;
       if (isTypeOmitted(typeNode)) {
-        if (reportMode == ReportMode.Report) {
-          this.error(
-            DiagnosticCode.Type_expected,
-            typeNode.range
-          );
+        let inferType: Type | null = null;
+        let bodyNode = prototype.bodyNode;
+        if (bodyNode) {
+          inferType = this.inferFunctionReturnType(bodyNode, prototype.parent, ctxTypes);
         }
-        return null;
+        if (!inferType) {
+          if (reportMode == ReportMode.Report) {
+            this.error(
+              DiagnosticCode.Type_expected,
+              typeNode.range
+            );
+          }
+          return null;
+        }
+        returnType = inferType;
+      } else {
+        let type = this.resolveType(
+          typeNode,
+          null,
+          prototype.parent, // relative to function
+          ctxTypes,
+          reportMode
+        );
+        if (!type) return null;
+        returnType = type;
       }
-      let type = this.resolveType(
-        typeNode,
-        null,
-        prototype.parent, // relative to function
-        ctxTypes,
-        reportMode
-      );
-      if (!type) return null;
-      returnType = type;
     }
 
     let signature = Signature.create(this.program, parameterTypes, returnType, thisType, requiredParameters);

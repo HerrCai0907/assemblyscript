@@ -1508,12 +1508,6 @@ export class Parser extends DiagnosticEmitter {
       returnType = Node.createOmittedType(
         tn.range(tn.pos)
       );
-      if (!isSetter) {
-        this.error(
-          DiagnosticCode.Type_expected,
-          returnType.range
-        ); // recoverable
-      }
     }
 
     let signature = Node.createFunctionType(
