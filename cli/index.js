@@ -706,6 +706,11 @@ export async function main(argv, options) {
     if (code) return code;
   }
 
+  // remove all grammar surger
+  {
+    assemblyscript.desurgar(program);
+  }
+
   // Pre-emptively initialize the program
   {
     let begin = stats.begin();

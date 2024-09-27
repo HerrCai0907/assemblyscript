@@ -102,9 +102,9 @@ export const enum NodeKind {
   Variable,
   Void,
   While,
-  Module,
 
   // declaration statements
+  Module,
   ClassDeclaration,
   EnumDeclaration,
   EnumValueDeclaration,

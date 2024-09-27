@@ -42,6 +42,7 @@ import {
 import { Module } from "./module";
 import { Program } from "./program";
 import { Source } from "./ast";
+import { Desurgar } from "./desurgar"
 
 // Options
 
@@ -350,6 +351,12 @@ export function getDependee(program: Program, file: string): string | null {
 /** Initializes the program pre-emptively for transform hooks. */
 export function initializeProgram(program: Program): void {
   program.initialize();
+}
+
+/** Compiles the parsed sources to a module. */
+export function desurgar(program: Program): void {
+  program.parser.finish();
+  new Desurgar(program).desurgar();
 }
 
 /** Compiles the parsed sources to a module. */
