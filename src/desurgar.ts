@@ -72,8 +72,10 @@ import {
   WhileStatement,
 } from "./ast";
 import { Program } from "./program";
+import { Token } from "./tokenizer";
 
 export class Desurgar {
+  private stack: Node[] = [];
   constructor(private program: Program) {}
 
   desurgar(): void {
@@ -129,6 +131,10 @@ export class Desurgar {
     this.visitNodes(node.expressions);
   }
   visitElementAccessExpression(node: ElementAccessExpression): void {
+    let lastNode = this.getLast();
+    if (lastNode.kind == NodeKind.Binary && (<BinaryExpression>lastNode).operator == Token.Plus_Equals) {
+      console.log(`${node.range}`, this.stack[this.stack.length - 2].kind);
+    }
     this.visitNode(node.expression);
     this.visitNode(node.elementExpression);
   }
@@ -335,6 +341,7 @@ export class Desurgar {
     if (node == null) {
       return;
     }
+    this.stack.push(node);
     switch (node.kind) {
       case NodeKind.Source:
         this.visitSource(<Source>node);
@@ -547,5 +554,10 @@ export class Desurgar {
         this.visitCommentNode(<CommentNode>node);
         break;
     }
+    this.stack.pop();
+  }
+
+  getLast(): Node {
+    return this.stack[this.stack.length - 2];
   }
 }
