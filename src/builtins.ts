@@ -43,7 +43,8 @@ import {
   NodeKind,
   LiteralExpression,
   ArrayLiteralExpression,
-  IdentifierExpression
+  IdentifierExpression,
+  IntegerLiteralExpression
 } from "./ast";
 
 import {
@@ -721,6 +722,7 @@ export namespace BuiltinNames {
   export const visit_globals = "~lib/rt/__visit_globals";
   export const visit_members = "~lib/rt/__visit_members";
   export const tostack = "~lib/rt/__tostack";
+  export const element_access_compound = "~lib/builtins/element_access_compound";
 
   // std/number.ts
   export const NaN = "~lib/number/NaN";
@@ -10650,6 +10652,30 @@ function builtin_i32x4_relaxed_dot_i8x16_i7x16_add_s(ctx: BuiltinFunctionContext
   return builtin_v128_relaxed_dot_add(ctx);
 }
 builtinFunctions.set(BuiltinNames.i32x4_relaxed_dot_i8x16_i7x16_add_s, builtin_i32x4_relaxed_dot_i8x16_i7x16_add_s);
+
+// builtin variable for compiler
+function builtin_element_access_index(ctx: BuiltinFunctionContext): ExpressionRef {
+  console.log(ctx.compiler.currentFlow.sourceFunction.internalName)
+  let compiler = ctx.compiler;
+  let operands = ctx.operands;
+  let module = compiler.module;
+  let type = ctx.contextualType;
+  let uuid = (<IntegerLiteralExpression>operands[1]).value;
+  if (elementAccess.has(uuid)) {
+    // get stage
+    let localIdx = elementAccess.get(uuid)!;
+    elementAccess.delete(uuid);
+    return module.local_get(localIdx, type.toRef());
+  } else {
+    // set stage
+    let valueExpr = compiler.compileExpression(operands[0], type, Constraints.ConvImplicit);
+    let tmpLocal = compiler.currentFlow.getTempLocal(type);
+    let localIdx = tmpLocal.index;
+    elementAccess.set(uuid, localIdx);
+    return module.local_tee(localIdx, valueExpr, type.isManaged);
+  }
+}
+builtinFunctions.set(BuiltinNames.element_access_compound, builtin_element_access_index);
 
 // === Internal helpers =======================================================================
 

@@ -2592,6 +2592,10 @@ export abstract class i31 { // FIXME: usage of 'new' requires a class :(
   static get(i31expr: i31ref): i32 { return unreachable(); }
 }
 
+// @ts-ignore: decorator
+@builtin
+export declare function element_access_index<T>(value: T): T;
+
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 // @ts-ignore: decorator
